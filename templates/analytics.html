@@ -1,0 +1,432 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - Image Drive{% endblock %}
+
+{% block content %}
+<div class="analytics-container">
+    <div class="analytics-header">
+        <h1>Analytics Dashboard</h1>
+        <div class="export-buttons">
+            <a href="{{ url_for('export_analytics', format='json') }}" class="btn btn-secondary">Export JSON</a>
+            <a href="{{ url_for('export_analytics', format='csv') }}" class="btn btn-secondary">Export CSV</a>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Total Images</h3>
+            <p class="stat-value">{{ data.total_images }}</p>
+        </div>
+
+        <div class="stat-card">
+            <h3>Total Users</h3>
+            <p class="stat-value">{{ data.total_users }}</p>
+        </div>
+
+        <div class="stat-card">
+            <h3>Total Storage</h3>
+            <p class="stat-value">{{ (data.total_storage / (1024 * 1024)) | round(2) }} MB</p>
+        </div>
+
+        <div class="stat-card">
+            <h3>Total Downloads</h3>
+            <p class="stat-value">{{ data.total_downloads }}</p>
+        </div>
+    </div>
+
+    <!-- Latency Snapshots Section -->
+    {% if data.latency_snapshots %}
+    <div class="charts-section">
+        <div class="chart-card full-width">
+            <h2>Latency Snapshots (Last 24 Hours)</h2>
+            <div class="chart-content">
+                <div class="latency-table">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Operation Type</th>
+                                <th>Avg Latency</th>
+                                <th>P95 Latency</th>
+                                <th>Max Latency</th>
+                                <th>Min Latency</th>
+                                <th>Std Latency</th>
+                                <th>Request Count</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for operation in data.latency_snapshots %}
+                            <tr>
+                                <td>
+                                    <span class="operation-badge {{ operation.operation_type|replace('_', '-') }}">
+                                        {{ operation.operation_type|replace('_', ' ')|title }}
+                                    </span>
+                                </td>
+                                <td class="latency-value {{ 'high-latency' if operation.avg_latency > 2 else 'medium-latency' if operation.avg_latency > 1 else 'low-latency' }}">
+                                    {{ "%.3f"|format(operation.avg_latency) }}s
+                                </td>
+                                <td class="latency-value">{{ "%.3f"|format(operation.p95_latency) }}s</td>
+                                <td class="latency-value">{{ "%.3f"|format(operation.max_latency) }}s</td>
+                                <td class="latency-value">{{ "%.3f"|format(operation.min_latency) }}s</td>
+                                <td class="latency-value">{{ "%.3f"|format(operation.std_latency) }}s</td>
+                                <td class="request-count">{{ operation.request_count }}</td>
+                                <td>
+                                    <span class="status-badge {{ 'excellent' if operation.avg_latency < 0.5 else 'good' if operation.avg_latency < 1 else 'warning' if operation.avg_latency < 3 else 'critical' }}">
+                                        {% if operation.avg_latency < 0.5 %}
+                                            Excellent
+                                        {% elif operation.avg_latency < 1 %}
+                                            Good
+                                        {% elif operation.avg_latency < 3 %}
+                                            Warning
+                                        {% else %}
+                                            Critical
+                                        {% endif %}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Original Analytics Sections -->
+    <div class="charts-section">
+        <div class="chart-card">
+            <h2>Category Distribution</h2>
+            <div class="chart-content">
+                {% if data.category_distribution %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th>Count</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for category, count in data.category_distribution.items() %}
+                        <tr>
+                            <td><span class="category-badge">{{ category }}</span></td>
+                            <td>{{ count }}</td>
+                            <td>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: {{ (count / data.total_images * 100) | round(1) }}%">
+                                        {{ (count / data.total_images * 100) | round(1) }}%
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="empty-data">No category data available</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <h2>File Size Distribution</h2>
+            <div class="chart-content">
+                {% if data.size_distribution %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Size Range</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for size_range, count in data.size_distribution.items() %}
+                        <tr>
+                            <td>{{ size_range }}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="empty-data">No size data available</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <h2>Search Type Distribution</h2>
+            <div class="chart-content">
+                {% if data.search_type_distribution %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Search Type</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for search_type, count in data.search_type_distribution.items() %}
+                        <tr>
+                            <td>{{ search_type }}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="empty-data">No search data available</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <h2>Top Downloaded Images</h2>
+            <div class="chart-content">
+                {% if data.top_downloads %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Image</th>
+                            <th>Downloads</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for img in data.top_downloads %}
+                        <tr>
+                            <td><a href="{{ url_for('image_detail', image_id=img.id) }}">{{ img.filename }}</a></td>
+                            <td>{{ img.download_count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="empty-data">No download data available</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if data.upload_trends %}
+        <div class="chart-card full-width">
+            <h2>Upload Trends (Last 30 Days)</h2>
+            <div class="chart-content">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Uploads</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for date, count in data.upload_trends.items() | sort %}
+                        <tr>
+                            <td>{{ date }}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+/* Latency Snapshots Styles */
+.latency-table {
+    overflow-x: auto;
+}
+
+.latency-value {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+}
+
+.low-latency {
+    color: #28a745;
+}
+
+.medium-latency {
+    color: #ffc107;
+}
+
+.high-latency {
+    color: #dc3545;
+}
+
+.request-count {
+    text-align: center;
+    font-weight: bold;
+}
+
+.operation-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.status-badge.excellent {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-badge.good {
+    background: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-badge.warning {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-badge.critical {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+/* Breakdown Styles */
+.breakdown-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.breakdown-card {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    border-left: 4px solid #007bff;
+}
+
+.breakdown-card h3 {
+    margin: 0 0 1rem 0;
+    color: #333;
+    font-size: 1.1rem;
+}
+
+.breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    padding: 0.25rem 0;
+}
+
+.breakdown-item .label {
+    font-weight: 500;
+    color: #666;
+}
+
+.breakdown-item .value {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: #333;
+}
+
+.breakdown-item .percentage {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+/* Trend Indicators */
+.trend-indicator {
+    font-weight: bold;
+}
+
+.trend-indicator.up {
+    color: #dc3545;
+}
+
+.trend-indicator.down {
+    color: #28a745;
+}
+
+.trend-indicator.stable {
+    color: #6c757d;
+}
+
+/* Existing Styles (保持原有样式不变) */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin: 0.5rem 0 0 0;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.charts-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+}
+
+.chart-card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.chart-card.full-width {
+    grid-column: 1 / -1;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.data-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+}
+
+.empty-data {
+    text-align: center;
+    color: #6c757d;
+    font-style: italic;
+    padding: 2rem;
+}
+</style>
+{% endblock %}

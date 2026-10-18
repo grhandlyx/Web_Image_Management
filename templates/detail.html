@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}{{ image.original_filename }} - Image Drive{% endblock %}
+
+{% block content %}
+<div class="detail-container">
+    <div class="breadcrumb">
+        <a href="{{ url_for('gallery') }}">Gallery</a> / {{ image.original_filename }}
+    </div>
+
+    <div class="detail-layout">
+        <div class="main-image-section">
+            <h1>{{ image.original_filename }}</h1>
+
+            <div class="image-display">
+                <img src="{{ url_for('serve_image', image_id=image.id) }}" alt="{{ image.original_filename }}">
+            </div>
+
+            <div class="image-actions">
+                <a href="{{ url_for('download_image', image_id=image.id) }}" class="btn btn-primary">Download</a>
+            </div>
+
+            <div class="image-metadata">
+                <h2>Image Information</h2>
+                <table>
+                    <tr>
+                        <th>File Name:</th>
+                        <td>{{ image.original_filename }}</td>
+                    </tr>
+                    <tr>
+                        <th>Category:</th>
+                        <td><span class="category-badge">{{ image.category or 'uncategorized' }}</span></td>
+                    </tr>
+                    <tr>
+                        <th>File Size:</th>
+                        <td>{{ (image.file_size / 1024) | round(2) }} KB</td>
+                    </tr>
+                    <tr>
+                        <th>Upload Date:</th>
+                        <td>{{ image.upload_date.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    </tr>
+                    <tr>
+                        <th>Downloads:</th>
+                        <td>{{ image.download_count }}</td>
+                    </tr>
+                </table>
+
+                {% if image.ocr_text %}
+                <div class="ocr-section">
+                    <h3>Detected Text (OCR)</h3>
+                    <div class="ocr-text">{{ image.ocr_text }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="similar-panel">
+            <h2>Similar Images</h2>
+
+            {% if similar_images %}
+            <div class="similar-grid">
+                {% for sim_img, score in similar_images %}
+                <div class="similar-item">
+                    <a href="{{ url_for('image_detail', image_id=sim_img.id) }}">
+                        <img src="{{ url_for('serve_image', image_id=sim_img.id) }}" alt="{{ sim_img.original_filename }}">
+                    </a>
+                    <p class="similarity-score">{{ (score * 100) | round(1) }}% similar</p>
+                    <p class="similar-name">{{ sim_img.original_filename }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="empty-similar">No similar images found</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

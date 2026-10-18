@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Error - Image Drive{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <h1>Oops! Something went wrong</h1>
+    <p class="error-message">{{ error }}</p>
+    <a href="{{ url_for('gallery') }}" class="btn btn-primary">Go to Gallery</a>
+</div>
+{% endblock %}

@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Gallery - Image Drive{% endblock %}
+
+{% block content %}
+<div class="gallery-header">
+    <h1>Image Gallery</h1>
+
+    <div class="search-upload-section">
+        <div class="search-container">
+            <!-- Search scope selector -->
+            <div class="search-scope">
+                <label style="font-weight: 500; margin-right: 10px;">Search in:</label>
+                <select id="searchScope" style="padding: 0.6rem; border: 1px solid #ddd; border-radius: 4px; margin-right: 10px;">
+                    <option value="local">Local Library</option>
+                    <option value="online">Online (Unsplash/Pexels)</option>
+                    <option value="hybrid" selected>Both (Hybrid)</option>
+                </select>
+            </div>
+
+            <input type="text" id="searchText" placeholder="Search by text description...">
+            <button onclick="performSearch()" class="btn btn-secondary">Search</button>
+
+            <input type="text" id="searchOCR" placeholder="Search by OCR text...">
+            <button onclick="searchByOCR()" class="btn btn-secondary">OCR Search</button>
+
+            <div class="file-upload-inline">
+                <input type="file" id="similarSearch" accept="image/*" onchange="searchBySimilar()">
+                <label for="similarSearch" class="btn btn-secondary">Similar Image Search</label>
+            </div>
+        </div>
+
+        <div class="upload-container">
+            <input type="file" id="fileUpload" accept="image/*" multiple style="display:none">
+            <button onclick="document.getElementById('fileUpload').click()" class="btn btn-primary">Upload Images</button>
+            <div id="uploadStatus"></div>
+        </div>
+    </div>
+</div>
+
+<div id="searchResults" style="display:none;">
+    <h2>Search Results</h2>
+    <button onclick="clearSearch()" class="btn btn-secondary">Clear Search</button>
+    <div id="resultsGrid" class="image-grid"></div>
+</div>
+
+<div id="galleryView">
+    {% if images.items %}
+    <div class="image-grid">
+        {% for image in images.items %}
+        <div class="image-card">
+            <a href="{{ url_for('image_detail', image_id=image.id) }}">
+                <img src="{{ url_for('serve_image', image_id=image.id) }}" alt="{{ image.original_filename }}" loading="lazy">
+            </a>
+            <div class="image-info">
+                <h3>{{ image.original_filename }}</h3>
+                <p class="category-badge">{{ image.category or 'uncategorized' }}</p>
+                <p class="upload-date">{{ image.upload_date.strftime('%Y-%m-%d') }}</p>
+                <a href="{{ url_for('download_image', image_id=image.id) }}" class="btn btn-sm">Download</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="pagination">
+        {% if images.has_prev %}
+        <a href="{{ url_for('gallery', page=images.prev_num) }}" class="btn">Previous</a>
+        {% endif %}
+
+        <span>Page {{ images.page }} of {{ images.pages }}</span>
+
+        {% if images.has_next %}
+        <a href="{{ url_for('gallery', page=images.next_num) }}" class="btn">Next</a>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h2>No images yet</h2>
+        <p>Upload your first image to get started!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('fileUpload').addEventListener('change', async function(e) {
+    const files = e.target.files;
+    const statusDiv = document.getElementById('uploadStatus');
+    statusDiv.innerHTML = '';
+
+    for (let file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            statusDiv.innerHTML += `<p>Uploading ${file.name}...</p>`;
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            if (response.ok) {
+                statusDiv.innerHTML += `<p class="success">✓ ${file.name} uploaded (Category: ${result.category})</p>`;
+            } else {
+                statusDiv.innerHTML += `<p class="error">✗ ${file.name}: ${result.error}</p>`;
+            }
+        } catch (error) {
+            statusDiv.innerHTML += `<p class="error">✗ ${file.name}: Upload failed</p>`;
+        }
+    }
+
+    setTimeout(() => window.location.reload(), 2000);
+});
+
+// Unified search function that respects scope
+async function performSearch() {
+    const query = document.getElementById('searchText').value;
+    const scope = document.getElementById('searchScope').value;
+
+    if (!query) return;
+
+    try {
+        let response, data;
+
+        if (scope === 'local') {
+            // Local semantic search
+            response = await fetch(`/search/text?q=${encodeURIComponent(query)}`);
+            data = await response.json();
+            if (response.ok) {
+                displayResults(data.results, 'Local Semantic', true);
+            } else {
+                alert('Search failed: ' + (data.error || 'Unknown error'));
+            }
+        } else if (scope === 'online') {
+            // Online search
+            response = await fetch(`/search/online?q=${encodeURIComponent(query)}`);
+            data = await response.json();
+            if (response.ok) {
+                displayOnlineResults(data.results, 'Online');
+            } else {
+                if (response.status === 503) {
+                    alert('Online search not configured. Please add API keys in config.py');
+                } else {
+                    alert('Search failed: ' + (data.error || 'Unknown error'));
+                }
+            }
+        } else if (scope === 'hybrid') {
+            // Hybrid search
+            response = await fetch(`/search/hybrid?q=${encodeURIComponent(query)}`);
+            data = await response.json();
+            if (response.ok) {
+                displayHybridResults(data, query);
+            } else {
+                alert('Search failed: ' + (data.error || 'Unknown error'));
+            }
+        }
+    } catch (error) {
+        alert('Search failed: ' + error);
+    }
+}
+
+async function searchByText() {
+    performSearch();
+}
+
+async function searchByOCR() {
+    const query = document.getElementById('searchOCR').value;
+    if (!query) return;
+
+    try {
+        const response = await fetch(`/search/ocr?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+        displayResults(data.results, 'OCR');
+    } catch (error) {
+        alert('Search failed: ' + error);
+    }
+}
+
+async function searchBySimilar() {
+    const fileInput = document.getElementById('similarSearch');
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/search/similar', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        displayResults(data.results, 'Similar Image');
+    } catch (error) {
+        alert('Search failed: ' + error);
+    }
+}
+
+function displayResults(results, searchType) {
+    const resultsDiv = document.getElementById('searchResults');
+    const gridDiv = document.getElementById('resultsGrid');
+    const galleryView = document.getElementById('galleryView');
+
+    galleryView.style.display = 'none';
+    resultsDiv.style.display = 'block';
+
+    gridDiv.innerHTML = results.length > 0
+        ? results.map(img => `
+            <div class="image-card">
+                <a href="/image/${img.id}">
+                    <img src="/serve/${img.id}" alt="${img.filename}" loading="lazy">
+                </a>
+                <div class="image-info">
+                    <h3>${img.filename}</h3>
+                    ${img.similarity ? `<p>Similarity: ${(img.similarity * 100).toFixed(1)}%</p>` : ''}
+                    <a href="/download/${img.id}" class="btn btn-sm">Download</a>
+                </div>
+            </div>
+        `).join('')
+        : '<p>No results found</p>';
+}
+
+function displayOnlineResults(results, searchType) {
+    const resultsDiv = document.getElementById('searchResults');
+    const gridDiv = document.getElementById('resultsGrid');
+    const galleryView = document.getElementById('galleryView');
+
+    galleryView.style.display = 'none';
+    resultsDiv.style.display = 'block';
+
+    gridDiv.innerHTML = results.length > 0
+        ? results.map(img => `
+            <div class="image-card">
+                <a href="${img.url}" target="_blank">
+                    <img src="${img.thumb_url}" alt="${img.description}" loading="lazy">
+                </a>
+                <div class="image-info">
+                    <h3 style="font-size: 0.9rem;">${img.description}</h3>
+                    <p style="font-size: 0.85rem; color: #7f8c8d;">
+                        <span class="category-badge">${img.source}</span><br>
+                        By: <a href="${img.author_url}" target="_blank">${img.author}</a>
+                    </p>
+                    <a href="${img.download_url}" target="_blank" class="btn btn-sm">View Full</a>
+                </div>
+            </div>
+        `).join('')
+        : '<p>No online results found</p>';
+}
+
+function displayHybridResults(data, query) {
+    const resultsDiv = document.getElementById('searchResults');
+    const gridDiv = document.getElementById('resultsGrid');
+    const galleryView = document.getElementById('galleryView');
+
+    galleryView.style.display = 'none';
+    resultsDiv.style.display = 'block';
+
+    let html = '';
+
+    // Local results section
+    if (data.local && data.local.length > 0) {
+        html += '<h3 style="margin: 20px 0 10px 0; color: #2c3e50;">📁 Local Results</h3>';
+        html += '<div class="image-grid">';
+        html += data.local.map(img => `
+            <div class="image-card">
+                <a href="${img.detail_url}">
+                    <img src="${img.url}" alt="${img.filename}" loading="lazy">
+                </a>
+                <div class="image-info">
+                    <h3>${img.filename}</h3>
+                    <p>Similarity: ${(img.similarity * 100).toFixed(1)}%</p>
+                    <a href="/download/${img.id}" class="btn btn-sm">Download</a>
+                </div>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+
+    // Online results section
+    if (data.online && data.online.length > 0) {
+        html += '<h3 style="margin: 20px 0 10px 0; color: #2c3e50;">🌐 Online Results</h3>';
+        html += '<div class="image-grid">';
+        html += data.online.map(img => `
+            <div class="image-card">
+                <a href="${img.url}" target="_blank">
+                    <img src="${img.thumb_url}" alt="${img.description}" loading="lazy">
+                </a>
+                <div class="image-info">
+                    <h3 style="font-size: 0.9rem;">${img.description}</h3>
+                    <p style="font-size: 0.85rem;">
+                        <span class="category-badge">${img.source}</span><br>
+                        By: <a href="${img.author_url}" target="_blank">${img.author}</a>
+                    </p>
+                    <a href="${img.download_url}" target="_blank" class="btn btn-sm">View Full</a>
+                </div>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+
+    if (!html) {
+        html = '<p>No results found</p>';
+    }
+
+    gridDiv.innerHTML = html;
+}
+
+function clearSearch() {
+    document.getElementById('searchResults').style.display = 'none';
+    document.getElementById('galleryView').style.display = 'block';
+    document.getElementById('searchText').value = '';
+    document.getElementById('searchOCR').value = '';
+}
+</script>
+{% endblock %}
